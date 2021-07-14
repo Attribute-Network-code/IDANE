@@ -10,6 +10,10 @@ class Dataset(object):
         self.label_file = config['label_file']
         self.walks_file = config['walks_file']
 
+        # W[num_nodes * num_nodes ]是邻接矩阵，
+        # X[num_nodes * num_nodes ]是游走模拟矩阵，
+        # Z[num_nodes * num_features]是特征矩阵，
+        # Y[num_nodes * num_classes]是标签矩阵/分组矩阵
         self.W, self.X, self.Z, self.Y = self._load_data()
 
         self.num_nodes = self.W.shape[0]
@@ -35,13 +39,13 @@ class Dataset(object):
         for idx, line in enumerate(lines):
             line = line.split(' ')
             node_map[line[0]] = idx
-            y = []
+            y = []#用来存储当前节点所对应的所有标签/分组
             for label in line[1:]:
                 if label not in label_map:
                     label_map[label] = cnt
                     cnt += 1
                 y.append(label_map[label])
-            Y.append(y)
+            Y.append(y)#汇总所有节点的标签列表[[第一个节点拥有的标签]，[第二个节点拥有的标签]，...[最后一个节点拥有的标签]]
         num_classes = len(label_map)
         num_nodes = len(node_map)
 
