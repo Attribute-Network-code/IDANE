@@ -10,7 +10,7 @@ if __name__=='__main__':
     }
 
     walk_config = {
-        'num_walks': 10,
+        'num_walks': 10,#游走次数
         'walk_length': 80,
         'window_size': 10,
         'walks_file': './citeseer/walks.txt'
