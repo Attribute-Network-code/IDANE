@@ -45,7 +45,7 @@ class Model(object):
                 if i < self.num_net_layers - 1:
                     cur_input = lrelu(cur_input)
                     cur_input = tf.layers.dropout(cur_input, drop_prob)
-                print(cur_input.get_shape())
+                print("cur_input.get_shape() in net encoder = {}".format(cur_input.get_shape()))
 
             net_H = cur_input
 
@@ -73,7 +73,7 @@ class Model(object):
                 cur_input = tf.layers.dense(cur_input, units=self.net_input_dim, kernel_initializer=w_init())
             cur_input = tf.nn.sigmoid(cur_input)
             x_recon = cur_input
-            print(cur_input.get_shape())
+            print("cur_input.get_shape() in net decoder = {}".format(cur_input.get_shape()))
 
             self.net_shape.reverse()
 
@@ -98,7 +98,7 @@ class Model(object):
                 if i < self.num_att_layers - 1:
                     cur_input = lrelu(cur_input)
                     cur_input = tf.layers.dropout(cur_input, drop_prob)
-                print(cur_input.get_shape())
+                print("cur_input.get_shape() in attr encoder = {}".format(cur_input.get_shape()))
 
             att_H = cur_input
 
@@ -115,7 +115,7 @@ class Model(object):
                     cur_input = tf.layers.dense(cur_input, units=struct[i + 1], kernel_initializer=w_init())
                 cur_input = lrelu(cur_input)
                 cur_input = tf.layers.dropout(cur_input, drop_prob)
-                print(cur_input.get_shape())
+                print("cur_input.get_shape() in attr decoder = {}".format(cur_input.get_shape()))
 
             name = 'att_decoder' + str(self.num_att_layers - 1)
             if self.is_init:

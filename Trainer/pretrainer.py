@@ -7,8 +7,8 @@ class PreTrainer(object):
 
     def __init__(self, config):
         self.config = config
-        self.net_input_dim = config['net_input_dim']
-        self.att_input_dim = config['att_input_dim']
+        self.net_input_dim = config['net_input_dim']#初始节点维度（个数）
+        self.att_input_dim = config['att_input_dim']#初始特征维度（个数）
         self.net_shape = config['net_shape']
         self.att_shape = config['att_shape']
         self.pretrain_params_path = config['pretrain_params_path']
@@ -25,7 +25,7 @@ class PreTrainer(object):
             shape = [self.att_input_dim] + self.att_shape
 
         for i in range(len(shape) - 1):
-            print (shape[i], shape[i+1])
+            print ('current shape[{}] = {}'.format(i,shape[i]), "current shape[{}] = {}".format(i+1,shape[i+1]))
 
 
             activation_fun1 = lrelu
@@ -39,7 +39,7 @@ class PreTrainer(object):
 
 
             SAE = SingleAE([shape[i], shape[i + 1]],
-                           {"iters": 50000, "batch_size": 256, "lr": 1e-3, "dropout": 0.8}, data,
+                           {"iters": 2000, "batch_size": 256, "lr": 1e-3, "dropout": 0.8}, data,
                            i, activation_fun1, activation_fun2)
             SAE.doTrain()
             W1, b1, W2, b2 = SAE.getWb()
