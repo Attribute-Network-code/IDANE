@@ -9,6 +9,8 @@ class PreTrainer(object):
         self.config = config
         self.net_input_dim = config['net_input_dim']#初始节点维度（个数）
         self.att_input_dim = config['att_input_dim']#初始特征维度（个数）
+        self.adj_input_dim = config['adj_input_dim']
+        self.adj_shape = config['adj_shape']
         self.net_shape = config['net_shape']
         self.att_shape = config['att_shape']
         self.pretrain_params_path = config['pretrain_params_path']
@@ -23,6 +25,8 @@ class PreTrainer(object):
             shape = [self.net_input_dim] + self.net_shape
         elif modal == 'att':
             shape = [self.att_input_dim] + self.att_shape
+        elif modal == 'adj':
+            shape = [self.adj_input_dim] + self.adj_shape
 
         for i in range(len(shape) - 1):
             print ('current shape[{}] = {}'.format(i,shape[i]), "current shape[{}] = {}".format(i+1,shape[i+1]))
