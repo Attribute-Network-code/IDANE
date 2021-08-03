@@ -12,6 +12,8 @@ class Model(object):
         self.config = config
         self.net_shape = config['net_shape']
         self.att_shape = config['att_shape']
+        self.adj_shape = config['adj_shape']
+        self.adj_input_dim = config['adj_input_dim']
         self.net_input_dim = config['net_input_dim']
         self.att_input_dim = config['att_input_dim']
         self.is_init = config['is_init']
@@ -19,6 +21,7 @@ class Model(object):
 
         self.num_net_layers = len(self.net_shape)
         self.num_att_layers = len(self.att_shape)
+        self.num_adj_layers = len(self.adj_shape)
 
         if self.is_init:
             if os.path.isfile(self.pretrain_params_path):
@@ -131,3 +134,56 @@ class Model(object):
             self.att_shape.reverse()
 
         return att_H, x_recon
+
+    def forward_adj(self, x, drop_prob, reuse=False):
+
+        with tf.variable_scope('adj_encoder', reuse=reuse) as scope:
+            cur_input = x
+            print(cur_input.get_shape())
+
+            # ============encoder===========
+            struct = self.adj_shape
+            for i in range(self.num_adj_layers):
+                name = 'adj_encoder' + str(i)
+                if self.is_init:
+                    cur_input = tf.layers.dense(cur_input, units=struct[i],
+                                                kernel_initializer=tf.constant_initializer(self.W_init[name]),
+                                                bias_initializer=tf.constant_initializer(self.b_init[name]))
+                else:
+                    cur_input = tf.layers.dense(cur_input, units=struct[i], kernel_initializer=w_init())
+                if i < self.num_adj_layers - 1:
+                    cur_input = lrelu(cur_input)
+                    cur_input = tf.layers.dropout(cur_input, drop_prob)
+                print("cur_input.get_shape() in adj encoder = {}".format(cur_input.get_shape()))
+
+            adj_H = cur_input
+
+            # ====================decoder=============
+            struct.reverse()
+            cur_input = adj_H
+            for i in range(self.num_adj_layers - 1):
+                name = 'adj_decoder' + str(i)
+                if self.is_init:
+                    cur_input = tf.layers.dense(cur_input, units=struct[i + 1],
+                                                kernel_initializer=tf.constant_initializer(self.W_init[name]),
+                                                bias_initializer=tf.constant_initializer(self.b_init[name]))
+                else:
+                    cur_input = tf.layers.dense(cur_input, units=struct[i + 1], kernel_initializer=w_init())
+                cur_input = lrelu(cur_input)
+                cur_input = tf.layers.dropout(cur_input, drop_prob)
+                print("cur_input.get_shape() in adj decoder = {}".format(cur_input.get_shape()))
+
+            name = 'adj_decoder' + str(self.num_adj_layers - 1)
+            if self.is_init:
+                cur_input = tf.layers.dense(cur_input, units=self.adj_input_dim,
+                                            kernel_initializer=tf.constant_initializer(self.W_init[name]),
+                                            bias_initializer=tf.constant_initializer(self.b_init[name]))
+            else:
+                cur_input = tf.layers.dense(cur_input, units=self.adj_input_dim, kernel_initializer=w_init())
+            # cur_input = tf.nn.sigmoid(cur_input)
+            x_recon = cur_input
+            print(cur_input.get_shape())
+
+            self.adj_shape.reverse()
+
+        return adj_H, x_recon

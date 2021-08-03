@@ -13,6 +13,8 @@ class Trainer(object):
         self.model = model
         self.net_input_dim = config['net_input_dim']
         self.att_input_dim = config['att_input_dim']
+        self.adj_input_dim = config['adj_input_dim']
+        self.adj_shape = config['adj_shape']
         self.net_shape = config['net_shape']
         self.att_shape = config['att_shape']
         self.drop_prob = config['drop_prob']
@@ -27,14 +29,16 @@ class Trainer(object):
 
         self.x = tf.placeholder(tf.float32, [None, self.net_input_dim])
         self.z = tf.placeholder(tf.float32, [None, self.att_input_dim])
-        self.w = tf.placeholder(tf.float32, [None, None])
+        self.w = tf.placeholder(tf.float32, [None, self.adj_input_dim])
+        # self.w = tf.placeholder(tf.float32, [None, None])
 
         self.neg_x = tf.placeholder(tf.float32, [None, self.net_input_dim])
         self.neg_z = tf.placeholder(tf.float32, [None, self.att_input_dim])
-        self.neg_w = tf.placeholder(tf.float32, [None, None])
+        self.neg_w = tf.placeholder(tf.float32, [None, self.adj_input_dim])
+        # self.neg_w = tf.placeholder(tf.float32, [None, None])
 
         self.optimizer, self.loss = self._build_training_graph()
-        self.net_H, self.att_H, self.H = self._build_eval_graph()
+        self.net_H, self.att_H, self.adj_H, self.H = self._build_eval_graph()
 
         gpu_config = tf.ConfigProto()
         gpu_config.gpu_options.allow_growth = True
@@ -46,6 +50,9 @@ class Trainer(object):
         net_H, net_recon = self.model.forward_net(self.x, drop_prob=self.drop_prob, reuse=False)
         neg_net_H, neg_net_recon = self.model.forward_net(self.neg_x, drop_prob=self.drop_prob, reuse=True)
 
+        adj_H, adj_recon = self.model.forward_adj(self.w, drop_prob=self.drop_prob, reuse=False)
+        neg_adj_H, neg_adj_recon = self.model.forward_adj(self.neg_w, drop_prob=self.drop_prob, reuse=True)
+
         att_H, att_recon = self.model.forward_att(self.z, drop_prob=self.drop_prob, reuse=False)
         neg_att_H, neg_att_recon = self.model.forward_att(self.neg_z, drop_prob=self.drop_prob, reuse=True)
 
@@ -54,67 +61,79 @@ class Trainer(object):
         recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_x - neg_net_recon), 1))
         recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(self.z - att_recon), 1))
         recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_z - neg_att_recon), 1))
-        recon_loss = recon_loss_1 + recon_loss_2 + recon_loss_3 + recon_loss_4
+        recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(self.w - adj_recon), 1))
+        recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_w - neg_adj_recon), 1))
+        recon_loss = recon_loss_1 + recon_loss_2 + recon_loss_3 + recon_loss_4 + recon_loss_5 + recon_loss_6
 
 
         #===============cross modality proximity==================
         pre_logit_pos = tf.reduce_sum(tf.multiply(net_H, att_H), 1)
         pre_logit_neg_1 = tf.reduce_sum(tf.multiply(neg_net_H, att_H), 1)
         pre_logit_neg_2 = tf.reduce_sum(tf.multiply(net_H, neg_att_H), 1)
+        pre_logit_pos2 = tf.reduce_sum(tf.multiply(adj_H, att_H), 1)
+        pre_logit_neg_21 = tf.reduce_sum(tf.multiply(neg_adj_H, att_H), 1)
+        pre_logit_neg_22 = tf.reduce_sum(tf.multiply(adj_H, neg_att_H), 1)
 
         pos_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(pre_logit_pos), logits=pre_logit_pos)
         neg_loss_1 = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(pre_logit_neg_1), logits=pre_logit_neg_1)
         neg_loss_2 = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(pre_logit_neg_2), logits=pre_logit_neg_2)
-        cross_modal_loss = tf.reduce_mean(pos_loss + neg_loss_1 + neg_loss_2)
+        pos_loss2 = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(pre_logit_pos2), logits=pre_logit_pos2)
+        neg_loss_21 = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(pre_logit_neg_21), logits=pre_logit_neg_21)
+        neg_loss_22 = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(pre_logit_neg_22), logits=pre_logit_neg_22)
+
+        cross_modal_loss = tf.reduce_mean(pos_loss + neg_loss_1 + neg_loss_2 + pos_loss2 + neg_loss_21 + neg_loss_22)
 
 
 
         #=============== first-order proximity================
-        pre_logit_pp_x = tf.matmul(net_H, net_H, transpose_b=True)
-        pre_logit_pp_z = tf.matmul(att_H, att_H, transpose_b=True)
-        pre_logit_nn_x = tf.matmul(neg_net_H, neg_net_H, transpose_b=True)
-        pre_logit_nn_z = tf.matmul(neg_att_H, neg_att_H, transpose_b=True)
-
-
-        pp_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.w)[0]),
-                                                            logits=pre_logit_pp_x) \
-                    - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_x)),
-                                                              logits=tf.diag_part(pre_logit_pp_x))
-        pp_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.w)[0]),
-                                                            logits=pre_logit_pp_z) \
-                    - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_z)),
-                                                              logits=tf.diag_part(pre_logit_pp_z))
-
-        nn_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.neg_w)[0]),
-                                                            logits=pre_logit_nn_x) \
-                    - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_x)),
-                                                              logits=tf.diag_part(pre_logit_nn_x))
-        nn_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.neg_w)[0]),
-                                                            logits=pre_logit_nn_z) \
-                    - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_z)),
-                                                              logits=tf.diag_part(pre_logit_nn_z))
-        first_order_loss = tf.reduce_mean(pp_x_loss + pp_z_loss + nn_x_loss + nn_z_loss)
+        # pre_logit_pp_x = tf.matmul(net_H, net_H, transpose_b=True)
+        # pre_logit_pp_z = tf.matmul(att_H, att_H, transpose_b=True)
+        # pre_logit_nn_x = tf.matmul(neg_net_H, neg_net_H, transpose_b=True)
+        # pre_logit_nn_z = tf.matmul(neg_att_H, neg_att_H, transpose_b=True)
+        #
+        #
+        # pp_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.w)[0]),
+        #                                                     logits=pre_logit_pp_x) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_x)),
+        #                                                       logits=tf.diag_part(pre_logit_pp_x))
+        # pp_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.w)[0]),
+        #                                                     logits=pre_logit_pp_z) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_z)),
+        #                                                       logits=tf.diag_part(pre_logit_pp_z))
+        #
+        # nn_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.neg_w)[0]),
+        #                                                     logits=pre_logit_nn_x) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_x)),
+        #                                                       logits=tf.diag_part(pre_logit_nn_x))
+        # nn_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.neg_w)[0]),
+        #                                                     logits=pre_logit_nn_z) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_z)),
+        #                                                       logits=tf.diag_part(pre_logit_nn_z))
+        # first_order_loss = tf.reduce_mean(pp_x_loss + pp_z_loss + nn_x_loss + nn_z_loss)
 
 
         #==========================================================
-        loss = recon_loss * self.beta + first_order_loss * self.gamma + cross_modal_loss * self.alpha
+        loss = recon_loss * self.beta + cross_modal_loss * self.alpha
+        # loss = recon_loss * self.beta + first_order_loss * self.gamma + cross_modal_loss * self.alpha
 
 
         vars_net = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'net_encoder')
         vars_att = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'att_encoder')
+        vars_adj = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'adj_encoder')
         print(vars_net)
 
 
-        opt = tf.train.AdamOptimizer(self.learning_rate).minimize(loss, var_list=vars_net+vars_att)
+        opt = tf.train.AdamOptimizer(self.learning_rate).minimize(loss, var_list=vars_net+vars_att+vars_adj)
 
         return opt, loss
 
     def _build_eval_graph(self):
         net_H, _ = self.model.forward_net(self.x, drop_prob=0.0, reuse=True)
         att_H, _ = self.model.forward_att(self.z, drop_prob=0.0, reuse=True)
-        H = tf.concat([tf.nn.l2_normalize(net_H, dim=1), tf.nn.l2_normalize(att_H, dim=1)], axis=1)
+        adj_H, _ = self.model.forward_adj(self.w, drop_prob=0.0, reuse=True)
+        H = tf.concat([tf.nn.l2_normalize(net_H, dim=1), tf.nn.l2_normalize(att_H, dim=1), tf.nn.l2_normalize(adj_H, dim=1)], axis=1)
 
-        return net_H, att_H, H
+        return net_H, att_H, adj_H, H
 
 
 
@@ -162,7 +181,8 @@ class Trainer(object):
 
                     emb = self.sess.run(self.H,
                                         feed_dict={self.x: mini_batch.X,
-                                                   self.z: mini_batch.Z})
+                                                   self.z: mini_batch.Z,
+                                                   self.w: mini_batch.W})
                     if train_emb is None:
                         train_emb = emb
                         train_label = mini_batch.Y
@@ -188,7 +208,8 @@ class Trainer(object):
         while True:
             mini_batch = graph.sample(self.batch_size, do_shuffle=False, with_label=True)
             emb = self.sess.run(self.H, feed_dict={self.x: mini_batch.X,
-                                                   self.z: mini_batch.Z})
+                                                   self.z: mini_batch.Z,
+                                                   self.w: mini_batch.W})
 
             if train_emb is None:
                 train_emb = emb
@@ -214,6 +235,7 @@ class Trainer(object):
     def generate_samples(self, graph):
         X = []
         Z = []
+        W = []
 
         order = np.arange(graph.num_nodes)
         np.random.shuffle(order)
@@ -228,19 +250,24 @@ class Trainer(object):
                 mini_batch = graph.sample_by_idx(order[index:])
             index += self.batch_size
 
-            net_H, att_H = self.sess.run([self.net_H, self.att_H],
+            net_H, att_H, adj_H = self.sess.run([self.net_H, self.att_H,self.adj_H],
                                          feed_dict={self.x: mini_batch.X,
-                                                    self.z: mini_batch.Z})
+                                                    self.z: mini_batch.Z,
+                                                    self.w: mini_batch.W})
             X.extend(net_H)
             Z.extend(att_H)
+            W.extend(adj_H)
 
         X = np.array(X)
         Z = np.array(Z)
+        W = np.array(W)
 
         X = preprocessing.normalize(X, norm='l2')
         Z = preprocessing.normalize(Z, norm='l2')
+        W = preprocessing.normalize(W, norm='l2')
 
-        sim = np.dot(X, Z.T)
+        sim = np.dot(X, Z.T) + np.dot(W, Z.T)
+
         neg_idx = np.argmin(sim, axis=1)
 
 

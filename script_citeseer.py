@@ -35,6 +35,8 @@ if __name__=='__main__':
     model_config = {
         'net_shape': [200, 100],
         'att_shape': [500, 100],
+        'adj_shape': [200, 100],
+        'adj_input_dim': graph.num_nodes,
         'net_input_dim': graph.num_nodes,
         'att_input_dim': graph.num_feas,
         'is_init': True,
@@ -44,6 +46,8 @@ if __name__=='__main__':
     trainer_config = {
         'net_shape': [200, 100],
         'att_shape': [500, 100],
+        'adj_shape': [200, 100],
+        'adj_input_dim': graph.num_nodes,
         'net_input_dim': graph.num_nodes,
         'att_input_dim': graph.num_feas,
         'drop_prob': 0.2,
@@ -61,8 +65,8 @@ if __name__=='__main__':
     pretrainer.pretrain(graph.Z, 'att')
     pretrainer.pretrain(graph.W, 'adj')
 
-    # model = Model(model_config)
-    # trainer = Trainer(model, trainer_config)
-    # trainer.train(graph)
-    # trainer.infer(graph)
+    model = Model(model_config)
+    trainer = Trainer(model, trainer_config)
+    trainer.train(graph)
+    trainer.infer(graph)
 
