@@ -1,5 +1,6 @@
 import numpy as np
 import linecache
+import networkx as nx
 from Utils.utils import *
 
 class Dataset(object):
@@ -9,7 +10,9 @@ class Dataset(object):
         self.feature_file = config['feature_file']
         self.label_file = config['label_file']
         self.walks_file = config['walks_file']
-
+        self.G = nx.read_edgelist(self.graph_file, nodetype=int, create_using=nx.DiGraph())
+        for edge in self.G.edges():
+            self.G[edge[0]][edge[1]]['weight'] = 1
         # W[num_nodes * num_nodes ]是邻接矩阵，
         # X[num_nodes * num_nodes ]是游走模拟矩阵，
         # Z[num_nodes * num_features]是特征矩阵，

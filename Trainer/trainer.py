@@ -8,9 +8,10 @@ import pickle
 
 class Trainer(object):
 
-    def __init__(self, model, config):
+    def __init__(self, model, config,graph):
         self.config = config
         self.model = model
+        self.graph = graph
         self.net_input_dim = config['net_input_dim']
         self.att_input_dim = config['att_input_dim']
         self.adj_input_dim = config['adj_input_dim']
@@ -45,7 +46,28 @@ class Trainer(object):
         self.sess = tf.Session(config=gpu_config)
         self.sess.run(tf.global_variables_initializer())
         self.saver = tf.train.Saver()
+    # ///////////////////////////添加邻居表示/////////////////////////////////////////
+    def build_neighbors_graph(self,X):
+        # print("X = ",X)
+        X_target = np.zeros(X.shape)
+        nodes = self.graph.G.nodes();
+        print("X_target.shape = ",X_target.shape)
+        for node in nodes:
+            neighbors = list(self.graph.G.neighbors(node))
+            if len(neighbors) == 0:
+                X_target[node] = X[node]
+            else:
+                temp = np.array(X[node])
+                for item in neighbors:
+                    temp = np.vstack((temp, X[item]))
+                    pass
+                temp = np.mean(temp, axis=0)
+                X_target[node] = temp
+            pass
+        return X_target;
+        pass
 
+    # ///////////////////////////添加邻居表示/////////////////////////////////////////
     def _build_training_graph(self):
         net_H, net_recon = self.model.forward_net(self.x, drop_prob=self.drop_prob, reuse=False)
         neg_net_H, neg_net_recon = self.model.forward_net(self.neg_x, drop_prob=self.drop_prob, reuse=True)
@@ -56,8 +78,14 @@ class Trainer(object):
         att_H, att_recon = self.model.forward_att(self.z, drop_prob=self.drop_prob, reuse=False)
         neg_att_H, neg_att_recon = self.model.forward_att(self.neg_z, drop_prob=self.drop_prob, reuse=True)
 
+
         #================high-order proximity & semantic proximity=============
         recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(self.x - net_recon), 1))
+        # print("self.x = ",self.x)
+        print()
+        print("net_recon = ", net_recon)
+        print("net_recon.shape = ", net_recon.shape)
+        # recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(X_target - net_recon), 1))
         recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_x - neg_net_recon), 1))
         recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(self.z - att_recon), 1))
         recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_z - neg_att_recon), 1))
@@ -135,10 +163,24 @@ class Trainer(object):
 
         return net_H, att_H, adj_H, H
 
+    def sample_by_idx_by_neighbor(self,idx):
+        mini_batch = Dotdict()
+        mini_batch.X = self.graph.X[idx]
+        mini_batch.Z = self.neighbor_Z[idx]
+        mini_batch.W = self.neighbor_W[idx]
 
+        return mini_batch
 
     def train(self, graph):
+        print('///////////////////////////////////////////////////')
+        # print(self.build_neighbors_graph(graph.X))
+        # print(self.build_neighbors_graph(graph.W))
+        # print(self.build_neighbors_graph(graph.Z))
+        self.neighbor_X = self.build_neighbors_graph(graph.X);
+        self.neighbor_Z = self.build_neighbors_graph(graph.Z);
+        self.neighbor_W= self.build_neighbors_graph(graph.W);
 
+        print('///////////////////////////////////////////////////')
         for epoch in range(self.num_epochs):
 
             idx1, idx2 = self.generate_samples(graph)
@@ -150,12 +192,17 @@ class Trainer(object):
                 if index > graph.num_nodes:
                     break
                 if index + self.batch_size < graph.num_nodes:
-                    mini_batch1 = graph.sample_by_idx(idx1[index:index + self.batch_size])
-                    mini_batch2 = graph.sample_by_idx(idx2[index:index + self.batch_size])
+                    mini_batch1 = self.sample_by_idx_by_neighbor(idx1[index:index + self.batch_size])
+                    mini_batch2 = self.sample_by_idx_by_neighbor(idx2[index:index + self.batch_size])
+                    # mini_batch1 = graph.sample_by_idx(idx1[index:index + self.batch_size])
+                    # mini_batch2 = graph.sample_by_idx(idx2[index:index + self.batch_size])
                 else:
-                    mini_batch1 = graph.sample_by_idx(idx1[index:])
-                    mini_batch2 = graph.sample_by_idx(idx2[index:])
+                    mini_batch1 = self.sample_by_idx_by_neighbor(idx1[index:])
+                    mini_batch2 = self.sample_by_idx_by_neighbor(idx2[index:])
+                    # mini_batch1 = graph.sample_by_idx(idx1[index:])
+                    # mini_batch2 = graph.sample_by_idx(idx2[index:])
                 index += self.batch_size
+                # print(mini_batch1.X.shape)
 
                 loss, _ = self.sess.run([self.loss, self.optimizer],
                                         feed_dict={self.x: mini_batch1.X,

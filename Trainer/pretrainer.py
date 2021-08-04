@@ -43,7 +43,7 @@ class PreTrainer(object):
 
 
             SAE = SingleAE([shape[i], shape[i + 1]],
-                           {"iters": 2000, "batch_size": 256, "lr": 1e-3, "dropout": 0.8}, data,
+                           {"iters": 50000, "batch_size": 256, "lr": 1e-3, "dropout": 0.8}, data,
                            i, activation_fun1, activation_fun2)
             SAE.doTrain()
             W1, b1, W2, b2 = SAE.getWb()
