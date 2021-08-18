@@ -64,7 +64,7 @@ if __name__=='__main__':
     # pretrainer.pretrain(graph.X, 'net')
     # pretrainer.pretrain(graph.Z, 'att')
     # pretrainer.pretrain(graph.W, 'adj')
-    #
+
     model = Model(model_config)
     trainer = Trainer(model, trainer_config,graph)
     trainer.train(graph)

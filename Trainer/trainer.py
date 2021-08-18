@@ -5,7 +5,6 @@ from Utils.utils import *
 from Model.SingleAE import SingleAE
 import pickle
 
-
 class Trainer(object):
 
     def __init__(self, model, config,graph):
@@ -31,11 +30,13 @@ class Trainer(object):
         self.x = tf.placeholder(tf.float32, [None, self.net_input_dim])
         self.z = tf.placeholder(tf.float32, [None, self.att_input_dim])
         self.w = tf.placeholder(tf.float32, [None, self.adj_input_dim])
+        self.rank = tf.placeholder(tf.float32, [None])
         # self.w = tf.placeholder(tf.float32, [None, None])
 
         self.neg_x = tf.placeholder(tf.float32, [None, self.net_input_dim])
         self.neg_z = tf.placeholder(tf.float32, [None, self.att_input_dim])
         self.neg_w = tf.placeholder(tf.float32, [None, self.adj_input_dim])
+        self.neg_rank = tf.placeholder(tf.float32, [None])
         # self.neg_w = tf.placeholder(tf.float32, [None, None])
 
         self.optimizer, self.loss = self._build_training_graph()
@@ -47,7 +48,7 @@ class Trainer(object):
         self.sess.run(tf.global_variables_initializer())
         self.saver = tf.train.Saver()
     # ///////////////////////////添加邻居表示/////////////////////////////////////////
-    def build_neighbors_graph(self,X):
+    def build_neighbors_graph(self,X,nodeRank):
         # print("X = ",X)
         X_target = np.zeros(X.shape)
         nodes = self.graph.G.nodes();
@@ -64,10 +65,39 @@ class Trainer(object):
                 temp = np.mean(temp, axis=0)
                 X_target[node] = temp
             pass
+        # X_target = (X_target.T * nodeRank).T
+        print("X_target.updata_shape = ", X_target.shape)
         return X_target;
         pass
 
     # ///////////////////////////添加邻居表示/////////////////////////////////////////
+
+    # ///////////////////////////添加节点排名表示/////////////////////////////////////////
+    def node_rank(self,W):
+        nodes = self.graph.G.nodes();
+        nodes_degree = {}
+        nodeRank = []
+        for node in nodes:
+            neighbors = list(self.graph.G.neighbors(node))
+            nodes_degree[node] = len(neighbors)#记录下每个节点的度
+        for node in nodes:
+            neighbors = list(self.graph.G.neighbors(node))
+            # sum =nodes_degree[node];
+            sum =0;
+            for item in neighbors:
+                sum += 1.0/nodes_degree[item];
+            # print("sum = ",sum);
+            # print("nodes_degree[node] = ",nodes_degree[node])
+            sum = sum / len(neighbors)
+            if(sum ==0):
+                nodeRank.append(1)
+            else:
+                nodeRank.append(sum)
+            pass
+        return nodeRank,nodes_degree
+        pass
+    # ///////////////////////////添加节点排名表示/////////////////////////////////////////
+
     def _build_training_graph(self):
         net_H, net_recon = self.model.forward_net(self.x, drop_prob=self.drop_prob, reuse=False)
         neg_net_H, neg_net_recon = self.model.forward_net(self.neg_x, drop_prob=self.drop_prob, reuse=True)
@@ -80,17 +110,29 @@ class Trainer(object):
 
 
         #================high-order proximity & semantic proximity=============
-        recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(self.x - net_recon), 1))
-        # print("self.x = ",self.x)
-        print()
-        print("net_recon = ", net_recon)
         print("net_recon.shape = ", net_recon.shape)
-        # recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(X_target - net_recon), 1))
-        recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_x - neg_net_recon), 1))
-        recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(self.z - att_recon), 1))
-        recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_z - neg_att_recon), 1))
-        recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(self.w - adj_recon), 1))
-        recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_w - neg_adj_recon), 1))
+        print("net_recon = ", net_recon)
+        print("self.x.shape = ", self.x.shape)
+        print("self.x - net_recon = ", (self.x - net_recon))
+        # recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.x - net_recon).T * self.rank).T), 1))
+        # recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(self.x - net_recon), 1))
+        # recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_x - neg_net_recon).T * self.neg_rank).T), 1))
+        # recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_x - neg_net_recon), 1))
+        # recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.z - att_recon).T*self.rank).T), 1))
+        # recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(self.z - att_recon), 1))
+        # recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_z - neg_att_recon).T*self.neg_rank).T), 1))
+        # recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_z - neg_att_recon), 1))
+        # recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.w - adj_recon).T*self.rank).T), 1))
+        # recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(self.w - adj_recon), 1))
+        # recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_w - neg_adj_recon).T*self.neg_rank).T), 1))
+        # recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_w - neg_adj_recon), 1))
+
+        recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.x - net_recon) * self.rank[:,None])), 1))
+        recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_x - neg_net_recon) * self.neg_rank[:,None])), 1))
+        recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.z - att_recon) * self.rank[:,None])), 1))
+        recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_z - neg_att_recon) * self.neg_rank[:,None])), 1))
+        recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.w - adj_recon) * self.rank[:,None])), 1))
+        recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_w - neg_adj_recon) * self.neg_rank[:,None])), 1))
         recon_loss = recon_loss_1 + recon_loss_2 + recon_loss_3 + recon_loss_4 + recon_loss_5 + recon_loss_6
 
 
@@ -113,31 +155,6 @@ class Trainer(object):
 
 
 
-        #=============== first-order proximity================
-        # pre_logit_pp_x = tf.matmul(net_H, net_H, transpose_b=True)
-        # pre_logit_pp_z = tf.matmul(att_H, att_H, transpose_b=True)
-        # pre_logit_nn_x = tf.matmul(neg_net_H, neg_net_H, transpose_b=True)
-        # pre_logit_nn_z = tf.matmul(neg_att_H, neg_att_H, transpose_b=True)
-        #
-        #
-        # pp_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.w)[0]),
-        #                                                     logits=pre_logit_pp_x) \
-        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_x)),
-        #                                                       logits=tf.diag_part(pre_logit_pp_x))
-        # pp_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.w)[0]),
-        #                                                     logits=pre_logit_pp_z) \
-        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_z)),
-        #                                                       logits=tf.diag_part(pre_logit_pp_z))
-        #
-        # nn_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.neg_w)[0]),
-        #                                                     logits=pre_logit_nn_x) \
-        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_x)),
-        #                                                       logits=tf.diag_part(pre_logit_nn_x))
-        # nn_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.w + tf.eye(tf.shape(self.neg_w)[0]),
-        #                                                     logits=pre_logit_nn_z) \
-        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_z)),
-        #                                                       logits=tf.diag_part(pre_logit_nn_z))
-        # first_order_loss = tf.reduce_mean(pp_x_loss + pp_z_loss + nn_x_loss + nn_z_loss)
 
 
         #==========================================================
@@ -164,10 +181,18 @@ class Trainer(object):
         return net_H, att_H, adj_H, H
 
     def sample_by_idx_by_neighbor(self,idx):
+        nodeRank, _ = self.node_rank(self.graph.W);
+        # print("nodeRank = ", nodeRank)
+        # print("nodeRank.shape() = ", len(nodeRank))
         mini_batch = Dotdict()
         mini_batch.X = self.graph.X[idx]
         mini_batch.Z = self.neighbor_Z[idx]
         mini_batch.W = self.neighbor_W[idx]
+        # print("idx = ", idx)
+        mini_batch.rank =[]
+        for item in idx:
+            mini_batch.rank.append(nodeRank[item]);
+
 
         return mini_batch
 
@@ -176,9 +201,10 @@ class Trainer(object):
         # print(self.build_neighbors_graph(graph.X))
         # print(self.build_neighbors_graph(graph.W))
         # print(self.build_neighbors_graph(graph.Z))
-        self.neighbor_X = self.build_neighbors_graph(graph.X);
-        self.neighbor_Z = self.build_neighbors_graph(graph.Z);
-        self.neighbor_W= self.build_neighbors_graph(graph.W);
+        nodeRank,_ =self.node_rank(graph.W);
+        self.neighbor_X = self.build_neighbors_graph(graph.X,nodeRank);
+        self.neighbor_Z = self.build_neighbors_graph(graph.Z,nodeRank);
+        self.neighbor_W= self.build_neighbors_graph(graph.W,nodeRank);
 
         print('///////////////////////////////////////////////////')
         for epoch in range(self.num_epochs):
@@ -204,11 +230,14 @@ class Trainer(object):
                 index += self.batch_size
                 # print(mini_batch1.X.shape)
 
+                # print("mini_batch1.x.shape = ",mini_batch1.x)
                 loss, _ = self.sess.run([self.loss, self.optimizer],
                                         feed_dict={self.x: mini_batch1.X,
                                                    self.z: mini_batch1.Z,
+                                                   self.rank: mini_batch1.rank,
                                                    self.neg_x: mini_batch2.X,
                                                    self.neg_z: mini_batch2.Z,
+                                                   self.neg_rank:mini_batch2.rank,
                                                    self.w: mini_batch1.W,
                                                    self.neg_w: mini_batch2.W})
 

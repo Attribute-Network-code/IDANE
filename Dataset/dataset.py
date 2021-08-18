@@ -10,7 +10,7 @@ class Dataset(object):
         self.feature_file = config['feature_file']
         self.label_file = config['label_file']
         self.walks_file = config['walks_file']
-        self.G = nx.read_edgelist(self.graph_file, nodetype=int, create_using=nx.DiGraph())
+        self.G = nx.read_edgelist(self.graph_file, nodetype=int)
         for edge in self.G.edges():
             self.G[edge[0]][edge[1]]['weight'] = 1
         # W[num_nodes * num_nodes ]是邻接矩阵，
