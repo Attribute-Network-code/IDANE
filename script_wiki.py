@@ -26,6 +26,8 @@ if __name__=='__main__':
     pretrain_config = {
         'net_shape': [200, 100],
         'att_shape': [500, 100],
+        'adj_shape': [200, 100],
+        'adj_input_dim': graph.num_nodes,
         'net_input_dim': graph.num_nodes,
         'att_input_dim': graph.num_feas,
         'pretrain_params_path': './Log/wiki/pretrain_params.pkl'}
@@ -33,6 +35,8 @@ if __name__=='__main__':
     model_config = {
         'net_shape': [200, 100],
         'att_shape': [500, 100],
+        'adj_shape': [200, 100],
+        'adj_input_dim': graph.num_nodes,
         'net_input_dim': graph.num_nodes,
         'att_input_dim': graph.num_feas,
         'is_init': True,
@@ -42,6 +46,8 @@ if __name__=='__main__':
     trainer_config = {
         'net_shape': [200, 100],
         'att_shape': [500, 100],
+        'adj_shape': [200, 100],
+        'adj_input_dim': graph.num_nodes,
         'net_input_dim': graph.num_nodes,
         'att_input_dim': graph.num_feas,
         'drop_prob': 0.2,
@@ -54,12 +60,13 @@ if __name__=='__main__':
         'model_path': './Log/wiki/wiki_model.pkl',
     }
 
-    pretrainer = PreTrainer(pretrain_config)
-    pretrainer.pretrain(graph.X, 'net')
-    pretrainer.pretrain(graph.Z, 'att')
+    # pretrainer = PreTrainer(pretrain_config)
+    # pretrainer.pretrain(graph.X, 'net')
+    # pretrainer.pretrain(graph.Z, 'att')
+    # pretrainer.pretrain(graph.W, 'adj')
 
     model = Model(model_config)
-    trainer = Trainer(model, trainer_config)
+    trainer = Trainer(model, trainer_config, graph)
     trainer.train(graph)
     trainer.infer(graph)
 
