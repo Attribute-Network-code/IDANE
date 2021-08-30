@@ -60,10 +60,10 @@ if __name__=='__main__':
         'model_path': './Log/cora/cora_model.pkl',
     }
 
-    pretrainer = PreTrainer(pretrain_config)
-    pretrainer.pretrain(graph.X, 'net')
-    pretrainer.pretrain(graph.Z, 'att')
-    pretrainer.pretrain(graph.W, 'adj')
+    # pretrainer = PreTrainer(pretrain_config)
+    # pretrainer.pretrain(graph.X, 'net')
+    # pretrainer.pretrain(graph.Z, 'att')
+    # pretrainer.pretrain(graph.W, 'adj')
 
     model = Model(model_config)
     trainer = Trainer(model, trainer_config,graph)

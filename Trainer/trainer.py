@@ -63,7 +63,7 @@ class Trainer(object):
                     temp = np.vstack((temp, X[item]))
                     pass
                 temp = np.mean(temp, axis=0)
-                X_target[node] = 0.8*temp+0.2*X[node]
+                X_target[node] = 1.0*temp+0*X[node]
             pass
         print("X_target.updata_shape = ", X_target.shape)
         return X_target;
@@ -116,19 +116,19 @@ class Trainer(object):
         print("self.x.shape = ", self.x.shape)
         print("self.x - net_recon = ", (self.x - net_recon))
 
-        recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(self.x - net_recon), 1))
-        recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_x - neg_net_recon), 1))
-        recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(self.z - att_recon), 1))
-        recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_z - neg_att_recon), 1))
-        recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(self.w - adj_recon), 1))
-        recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_w - neg_adj_recon), 1))
-
-        # recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.x - net_recon) * self.rank[:,None])), 1))
-        # recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_x - neg_net_recon) * self.neg_rank[:,None])), 1))
-        # recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.z - att_recon) * self.rank[:,None])), 1))
-        # recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_z - neg_att_recon) * self.neg_rank[:,None])), 1))
-        # recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.w - adj_recon) * self.rank[:,None])), 1))
-        # recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_w - neg_adj_recon) * self.neg_rank[:,None])), 1))
+        # recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(self.x - net_recon), 1))
+        # recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_x - neg_net_recon), 1))
+        # recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(self.z - att_recon), 1))
+        # recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_z - neg_att_recon), 1))
+        # recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(self.w - adj_recon), 1))
+        # recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(self.neg_w - neg_adj_recon), 1))
+        #
+        recon_loss_1 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.x - net_recon) * self.rank[:,None])), 1))
+        recon_loss_2 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_x - neg_net_recon) * self.neg_rank[:,None])), 1))
+        recon_loss_3 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.z - att_recon) * self.rank[:,None])), 1))
+        recon_loss_4 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_z - neg_att_recon) * self.neg_rank[:,None])), 1))
+        recon_loss_5 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.w - adj_recon) * self.rank[:,None])), 1))
+        recon_loss_6 = tf.reduce_mean(tf.reduce_sum(tf.square(((self.neg_w - neg_adj_recon) * self.neg_rank[:,None])), 1))
         recon_loss = recon_loss_1 + recon_loss_2 + recon_loss_3 + recon_loss_4 + recon_loss_5 + recon_loss_6
 
 
@@ -214,15 +214,15 @@ class Trainer(object):
                 if index > graph.num_nodes:
                     break
                 if index + self.batch_size < graph.num_nodes:
-                    # mini_batch1 = self.sample_by_idx_by_neighbor(idx1[index:index + self.batch_size])
-                    # mini_batch2 = self.sample_by_idx_by_neighbor(idx2[index:index + self.batch_size])
-                    mini_batch1 = graph.sample_by_idx(idx1[index:index + self.batch_size])
-                    mini_batch2 = graph.sample_by_idx(idx2[index:index + self.batch_size])
+                    mini_batch1 = self.sample_by_idx_by_neighbor(idx1[index:index + self.batch_size])
+                    mini_batch2 = self.sample_by_idx_by_neighbor(idx2[index:index + self.batch_size])
+                    # mini_batch1 = graph.sample_by_idx(idx1[index:index + self.batch_size])
+                    # mini_batch2 = graph.sample_by_idx(idx2[index:index + self.batch_size])
                 else:
-                    # mini_batch1 = self.sample_by_idx_by_neighbor(idx1[index:])
-                    # mini_batch2 = self.sample_by_idx_by_neighbor(idx2[index:])
-                    mini_batch1 = graph.sample_by_idx(idx1[index:])
-                    mini_batch2 = graph.sample_by_idx(idx2[index:])
+                    mini_batch1 = self.sample_by_idx_by_neighbor(idx1[index:])
+                    mini_batch2 = self.sample_by_idx_by_neighbor(idx2[index:])
+                    # mini_batch1 = graph.sample_by_idx(idx1[index:])
+                    # mini_batch2 = graph.sample_by_idx(idx2[index:])
                 index += self.batch_size
                 # print(mini_batch1.X.shape)
 
@@ -230,10 +230,10 @@ class Trainer(object):
                 loss, _ = self.sess.run([self.loss, self.optimizer],
                                         feed_dict={self.x: mini_batch1.X,
                                                    self.z: mini_batch1.Z,
-                                                   # self.rank: mini_batch1.rank,
+                                                   self.rank: mini_batch1.rank,
                                                    self.neg_x: mini_batch2.X,
                                                    self.neg_z: mini_batch2.Z,
-                                                   # self.neg_rank:mini_batch2.rank,
+                                                   self.neg_rank:mini_batch2.rank,
                                                    self.w: mini_batch1.W,
                                                    self.neg_w: mini_batch2.W})
 
