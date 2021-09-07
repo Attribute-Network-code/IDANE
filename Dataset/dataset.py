@@ -124,7 +124,7 @@ class Dataset(object):
         mini_batch = Dotdict()
         mini_batch.X = self.X[idx]
         mini_batch.Z = self.Z[idx]
-        # mini_batch.W = self.W[idx][:, idx]#这是原本的代码
+        mini_batch.A = self.W[idx][:, idx]#这是原本的代码
         mini_batch.W = self.W[idx]
 
         return mini_batch

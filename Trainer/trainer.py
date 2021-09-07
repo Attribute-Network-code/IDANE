@@ -31,13 +31,13 @@ class Trainer(object):
         self.z = tf.placeholder(tf.float32, [None, self.att_input_dim])
         self.w = tf.placeholder(tf.float32, [None, self.adj_input_dim])
         self.rank = tf.placeholder(tf.float32, [None])
-        # self.w = tf.placeholder(tf.float32, [None, None])
+        self.a = tf.placeholder(tf.float32, [None, None])
 
         self.neg_x = tf.placeholder(tf.float32, [None, self.net_input_dim])
         self.neg_z = tf.placeholder(tf.float32, [None, self.att_input_dim])
         self.neg_w = tf.placeholder(tf.float32, [None, self.adj_input_dim])
         self.neg_rank = tf.placeholder(tf.float32, [None])
-        # self.neg_w = tf.placeholder(tf.float32, [None, None])
+        self.neg_a = tf.placeholder(tf.float32, [None, None])
 
         self.optimizer, self.loss = self._build_training_graph()
         self.net_H, self.att_H, self.adj_H, self.H = self._build_eval_graph()
@@ -75,25 +75,29 @@ class Trainer(object):
     def node_rank(self):
         nodes = self.graph.G.nodes();
         nodes_degree = {}
+        nodes_score = {}
         nodeRank = []
         for node in nodes:
             neighbors = list(self.graph.G.neighbors(node))
             nodes_degree[node] = len(neighbors)#记录下每个节点的度
         for node in nodes:
             neighbors = list(self.graph.G.neighbors(node))
-            # sum =nodes_degree[node];
             sum =0;
             for item in neighbors:
                 sum += 1.0/nodes_degree[item];#方案1；
-                # sum += nodes_degree[item];#方案2
-            # print("sum = ",sum);
-            # print("nodes_degree[node] = ",nodes_degree[node])
-            if(sum ==0):
-                nodeRank.append(1)
+            nodes_score[node] = sum;#记录下每个节点的得分
+        for node in nodes:
+            neighbors = list(self.graph.G.neighbors(node))
+            sumscore = nodes_score[node];
+            sumdegree = nodes_degree[node];
+            for item in neighbors:
+                sumscore += nodes_score[item];
+                sumdegree += nodes_degree[item];
+            if(sumscore ==0):
+                nodeRank.append(0)
             else:
-                sum = sum / len(neighbors) #方案1；
-                # sum = len(neighbors) / sum;  # 方案2；
-                nodeRank.append(sum)
+                rank = ((nodes_degree[node] ** 2) / sumdegree) * sumscore  #方案1；
+                nodeRank.append(rank)
             pass
         return nodeRank,nodes_degree
         pass
@@ -132,6 +136,7 @@ class Trainer(object):
         recon_loss = recon_loss_1 + recon_loss_2 + recon_loss_3 + recon_loss_4 + recon_loss_5 + recon_loss_6
 
 
+
         #===============cross modality proximity==================
         pre_logit_pos = tf.reduce_sum(tf.multiply(net_H, att_H), 1)
         pre_logit_neg_1 = tf.reduce_sum(tf.multiply(neg_net_H, att_H), 1)
@@ -149,10 +154,31 @@ class Trainer(object):
 
         cross_modal_loss = tf.reduce_mean(pos_loss + neg_loss_1 + neg_loss_2 + pos_loss2 + neg_loss_21 + neg_loss_22)
 
+        # # =============== first-order proximity================
+        # pre_logit_pp_x = tf.matmul(net_H, net_H, transpose_b=True)
+        # pre_logit_pp_z = tf.matmul(att_H, att_H, transpose_b=True)
+        # pre_logit_nn_x = tf.matmul(neg_net_H, neg_net_H, transpose_b=True)
+        # pre_logit_nn_z = tf.matmul(neg_att_H, neg_att_H, transpose_b=True)
+        # pp_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.a + tf.eye(tf.shape(self.a)[0]),
+        #                                                     logits=pre_logit_pp_x) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_x)),
+        #                                                       logits=tf.diag_part(pre_logit_pp_x))
+        # pp_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.a + tf.eye(tf.shape(self.a)[0]),
+        #                                                     logits=pre_logit_pp_z) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_pp_z)),
+        #                                                       logits=tf.diag_part(pre_logit_pp_z))
+        #
+        # nn_x_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.a + tf.eye(tf.shape(self.neg_a)[0]),
+        #                                                     logits=pre_logit_nn_x) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_x)),
+        #                                                       logits=tf.diag_part(pre_logit_nn_x))
+        # nn_z_loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.a + tf.eye(tf.shape(self.neg_a)[0]),
+        #                                                     logits=pre_logit_nn_z) \
+        #             - tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(tf.diag_part(pre_logit_nn_z)),
+        #                                                       logits=tf.diag_part(pre_logit_nn_z))
+        # first_order_loss = tf.reduce_mean(pp_x_loss + pp_z_loss + nn_x_loss + nn_z_loss)
 
-
-
-
+        # ==========================================================
         #==========================================================
         loss = recon_loss * self.beta + cross_modal_loss * self.alpha
         # loss = recon_loss * self.beta + first_order_loss * self.gamma + cross_modal_loss * self.alpha
@@ -182,6 +208,7 @@ class Trainer(object):
         # print("nodeRank.shape() = ", len(nodeRank))
         mini_batch = Dotdict()
         mini_batch.X = self.graph.X[idx]
+        mini_batch.A = self.graph.W[idx][:, idx]
         mini_batch.Z = self.neighbor_Z[idx]
         mini_batch.W = self.neighbor_W[idx]
         # print("idx = ", idx)
@@ -231,6 +258,8 @@ class Trainer(object):
                                         feed_dict={self.x: mini_batch1.X,
                                                    self.z: mini_batch1.Z,
                                                    self.rank: mini_batch1.rank,
+                                                   # self.a:mini_batch1.A,
+                                                   # self.neg_a:mini_batch2.A,
                                                    self.neg_x: mini_batch2.X,
                                                    self.neg_z: mini_batch2.Z,
                                                    self.neg_rank:mini_batch2.rank,
